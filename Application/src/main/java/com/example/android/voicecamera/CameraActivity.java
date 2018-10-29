@@ -16,25 +16,23 @@
 
 package com.example.android.voicecamera;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.provider.MediaStore;
 import android.util.Log;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.provider.MediaStore;
 import android.widget.Toast;
 
 public class CameraActivity extends Activity {
-
-    private static final String TAG = "CameraActivity";
     private static final int PERMISSIONS_REQUEST_ALL_PERMISSIONS = 1;
     private Bundle mSavedInstanceState;
+    private static final String TAG = "CameraActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.d(TAG, "onCreate: ");
         Intent intent = getIntent();
 
         if (needPermissions(this)) {
@@ -49,11 +47,25 @@ public class CameraActivity extends Activity {
             finish();
         }
     }
+    static public boolean needPermissions(Activity activity) {
+        Log.d(TAG, "needPermissions: ");
+        return activity.checkSelfPermission(Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED
+                || activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED;
+    }
 
-    @Override
+    private void requestPermissions() {
+        Log.d(TAG, "requestPermissions: ");
+        String[] permissions = new String[] {
+                Manifest.permission.CAMERA,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+        };
+        requestPermissions(permissions, PERMISSIONS_REQUEST_ALL_PERMISSIONS);
+    }
+
     public void onRequestPermissionsResult(int requestCode, String permissions[],
                                            int[] grantResults) {
-        Log.d(TAG, "onRequestPermissionsResult: ");
         switch (requestCode) {
             case PERMISSIONS_REQUEST_ALL_PERMISSIONS:
                 boolean hasAllPermissions = true;
@@ -75,22 +87,5 @@ public class CameraActivity extends Activity {
             default:
                 Log.e(TAG, "Unexpected request code");
         }
-    }
-
-    static public boolean needPermissions(Activity activity) {
-        Log.d(TAG, "needPermissions: ");
-        return activity.checkSelfPermission(Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED
-                || activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void requestPermissions() {
-        Log.d(TAG, "requestPermissions: ");
-        String[] permissions = new String[] {
-            Manifest.permission.CAMERA,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE,
-        };
-        requestPermissions(permissions, PERMISSIONS_REQUEST_ALL_PERMISSIONS);
     }
 }

@@ -21,10 +21,6 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.app.Fragment;
-import android.app.VoiceInteractor;
-import android.app.VoiceInteractor.PickOptionRequest;
-import android.app.VoiceInteractor.PickOptionRequest.Option;
-import android.app.VoiceInteractor.Prompt;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -50,18 +46,15 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Looper;
 import android.os.Message;
 import android.util.Log;
 import android.util.Size;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -76,12 +69,25 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import android.app.VoiceInteractor;
+import android.app.VoiceInteractor.PickOptionRequest;
+import android.app.VoiceInteractor.PickOptionRequest.Option;
+import android.view.Gravity;
+import android.widget.TextView;
+import java.util.Timer;
+import java.util.TimerTask;
+
 public class CameraFragment extends Fragment implements View.OnClickListener {
+
+
+    private static final String EXTRA_TIMER_DURATION_SECONDS = "android.intent.extra.TIMER_DURATION_SECONDS";
+
+    private TextView mTimerCountdownLabel = null;
+    private Toast mTimerCountdownToast = null;
+
 
     /**
      * Tag for the {@link Log}.
@@ -90,7 +96,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
 
     private static final String EXTRA_USE_FRONT_FACING_CAMERA = "android.intent.extra.USE_FRONT_CAMERA";
 
-    private static final String EXTRA_TIMER_DURATION_SECONDS = "android.intent.extra.TIMER_DURATION_SECONDS";
     /**
      * Camera state: Showing camera preview.
      */
@@ -115,9 +120,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
      * Camera state: Picture was taken.
      */
     private static final int STATE_PICTURE_TAKEN = 4;
-
-    private TextView mTimerCountdownLabel = null;
-    private Toast mTimerCountdownToast = null;
 
     /**
      * {@link TextureView.SurfaceTextureListener} handles several lifecycle events on a
@@ -361,11 +363,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
     };
 
     /**
-     * A {@link Handler} for sharing photos {@link Toast}s.
-     */
-    private Handler mTimerHandler = null;
-
-    /**
      * A {@link Handler} for showing {@link Toast}s.
      */
     private Handler mMessageHandler = new Handler() {
@@ -385,7 +382,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
      * @param text The message to show
      */
     private void showToast(String text) {
-        Log.d(TAG, "showToast: ");
         // We show a Toast by sending request message to mMessageHandler. This makes sure that the
         // Toast is shown on the UI thread.
         Activity activity = getActivity();
@@ -401,10 +397,8 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
 
             Bundle extras = new Bundle();
             extras.putParcelable("context_uri", contextUri);
-
-            VoiceInteractor.Prompt prompt = new VoiceInteractor.Prompt("Here it is");
             activity.getVoiceInteractor().submitRequest(
-                  new VoiceInteractor.CompleteVoiceRequest(prompt, extras) {
+                    new VoiceInteractor.CompleteVoiceRequest("Here it is", extras) {
                         @Override
                         public void onCompleteResult(Bundle result) {
                             super.onCompleteResult(result);
@@ -412,25 +406,17 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
                             Intent intent = new Intent();
                             intent.setAction(Intent.ACTION_VIEW);
                             intent.setDataAndType(Uri.parse("file://" + mFile.getAbsolutePath()), "image/*");
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                            intent.addFlags(Intent.FLAG_DEBUG_LOG_RESOLUTION);
-                            tearDown();
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                            getActivity().finish();
                             startActivity(intent);
                         }
                     });
-       } else {
+        } else {
             Message message = Message.obtain();
             message.obj = text;
             mMessageHandler.sendMessage(message);
         }
-    }
-
-    private void tearDown() {
-        closeCamera();
-        mOrientationListener.disable();
-        stopBackgroundThread();
-        getActivity().finish();
     }
 
     /**
@@ -464,13 +450,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
             Log.e(TAG, "Couldn't find any suitable preview size");
             return choices[0];
         }
-    }
-
-    public static CameraFragment newInstance() {
-        Log.d(TAG, "newInstance: ");
-        CameraFragment fragment = new CameraFragment();
-        fragment.setRetainInstance(true);
-        return fragment;
     }
 
     @Override
@@ -592,7 +571,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
                             label.setText(String.format("Photo in %d", mCountdown));
                             mTimerCountdownToast.show();
                         }
-
                     }
                 });
                 mCountdown--;
@@ -603,34 +581,43 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
         }, 1000, 1000);
     }
 
+    private boolean isTimerSpecified() {
+        Log.d(TAG, "isTimerSpecified: ");
+        return getArguments() != null && getArguments().containsKey(EXTRA_TIMER_DURATION_SECONDS);
+    }
+
     private void startVoiceTrigger() {
         Log.d(TAG, "startVoiceTrigger: ");
-        Option option = new Option("cheese", 1);
+        Option option = new Option("cheese");
         option.addSynonym("ready");
         option.addSynonym("go");
         option.addSynonym("take it");
         option.addSynonym("ok");
 
-        VoiceInteractor.Prompt prompt = new VoiceInteractor.Prompt("Say Cheese");
         getActivity().getVoiceInteractor()
-            .submitRequest(new PickOptionRequest(prompt, new Option[]{option}, null) {
-                @Override
-                public void onPickOptionResult(boolean finished, Option[] selections, Bundle result) {
-                    if (finished && selections.length == 1) {
-                        Message message = Message.obtain();
-                        message.obj = result;
-                        takePicture();
-                    } else {
-                        getActivity().finish();
-                        tearDown();
+                .submitRequest(new PickOptionRequest("Say Cheese", new Option[]{option}, null) {
+                    @Override
+                    public void onPickOptionResult(boolean finished, Option[] selections, Bundle result) {
+                        if (finished && selections.length == 1) {
+                            Message message = Message.obtain();
+                            message.obj = result;
+                            takePicture();
+                        } else {
+                            getActivity().finish();
+                        }
                     }
-                }
-                @Override
-                public void onCancel() {
-                    getActivity().finish();
-                    tearDown();
-                }
-            });
+                    @Override
+                    public void onCancel() {
+                        getActivity().finish();
+                    }
+                });
+    }
+
+    public static CameraFragment newInstance() {
+        Log.d(TAG, "newInstance: ");
+        CameraFragment fragment = new CameraFragment();
+        fragment.setRetainInstance(true);
+        return fragment;
     }
 
     @Override
@@ -645,11 +632,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
     private boolean isCameraSpecified() {
         Log.d(TAG, "isCameraSpecified: ");
         return getArguments() != null && getArguments().containsKey(EXTRA_USE_FRONT_FACING_CAMERA);
-    }
-
-    private boolean isTimerSpecified() {
-        Log.d(TAG, "isTimerSpecified: ");
-        return getArguments() != null && getArguments().containsKey(EXTRA_TIMER_DURATION_SECONDS);
     }
 
     private boolean shouldUseCamera(int lensFacing) {
@@ -791,8 +773,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
      */
     private void stopBackgroundThread() {
         Log.d(TAG, "stopBackgroundThread: ");
-        if (mBackgroundThread == null)
-            return;
         mBackgroundThread.quitSafely();
         try {
             mBackgroundThread.join();
@@ -1008,30 +988,6 @@ public class CameraFragment extends Fragment implements View.OnClickListener {
         int jpegOrientation = (sensorOrientation + deviceOrientation + 360) % 360;
 
         return jpegOrientation;
-    }
-
-    /**
-     * Unlock the focus. This method should be called when still image capture sequence is finished.
-     */
-    private void unlockFocus() {
-        Log.d(TAG, "unlockFocus: ");
-        try {
-            if (mEnabledAutoFocus) {
-                // Reset the autofucos trigger
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_TRIGGER,
-                        CameraMetadata.CONTROL_AF_TRIGGER_CANCEL);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE,
-                        CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
-            }
-            mCaptureSession.capture(mPreviewRequestBuilder.build(), mCaptureCallback,
-                    mBackgroundHandler);
-            // After this, the camera will go back to the normal state of preview.
-            mState = STATE_PREVIEW;
-            mCaptureSession.setRepeatingRequest(mPreviewRequest, mCaptureCallback,
-                    mBackgroundHandler);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
     }
 
     @Override
